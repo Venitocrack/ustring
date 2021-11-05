@@ -121,10 +121,16 @@ class String():
 		if isinstance(self.string,bytes):
 			self.string = self.tostring()
 	
-	def tobytes(self):
-		"""return this but as bytes"""
+	def tobytes(self,encoding=-1):
+		"""
+		return this but as bytes
+		good to know:
+			the encoding used to this transformation 
+			is the encoding passed in the constructor
+			if no encoding given
+		"""
 		if isinstance(self.string,str):
-			return bytes(self.string,self.encoding)
+			return bytes(self.string,self.encoding if encoding != -1 else encoding)
 		return self.string
 
 	def switch_bytes(self):
@@ -134,7 +140,7 @@ class String():
 
 	def switch(self):
 		"""
-		if this is str transform to bytes
+		switch the type for str and bytes
 		for example: 
 			>>> s = String(b'hello')
 			>>> s.isbytes()
@@ -411,6 +417,9 @@ class String():
 				"mode must be of writting,got reading")
 
 	def split_literal(self,c,maxsplit=-1):
+		"""
+		split a string as a literal,not like re.Pattern or like int
+		"""
 		x = self.tostring().split(
 			String(c).tostring(),maxsplit=maxsplit)
 		r = []
@@ -485,7 +494,6 @@ class String():
 				else:
 					return self.split_literal(x,maxsplit=maxsplit)
 		except TypeError as e:
-			print(e)
 			if str(e) == f"in String.split(x) x expected to be str,re.Pattern,int or bytes,got {type(x)}":
 				raise 
 			else:
@@ -502,6 +510,11 @@ class String():
 		return self.split("\n",maxsplit=maxsplit)
 
 	def match(self,pattern,flags=0):
+		"""
+		matches this string using pattern `pattern` and flags `flags`,
+		similar to re.match(pattern,string,flags) where string is this
+		instance
+		"""
 		return re.match(pattern,self.tostring(),flags)
 
 	def compile(self):
@@ -689,6 +702,15 @@ class String():
 
 	@classmethod 
 	def bstr2str(cls,bs,encoding="utf-8"):
+		"""
+		transforms a string that is the first two hexadecimal digit
+		translates it to str
+		for Example:
+			>>> b"\xFF"
+			ÿ
+			>>> String.bstr2str("FF")
+			ÿ
+		"""
 		try:
 			if not(bs.startswith(r"\x")):
 				return cls(bs).tobytes(encoding=encoding)
@@ -700,6 +722,10 @@ class String():
 
 	@classmethod 
 	def str2bytes(cls,str,encoding="utf-8"):
+		"""
+		transform a given str to a bytes,
+		the encoding is given by `encoding`
+		"""
 		if not(isinstance(str,type(''))):
 			raise TypeError(
 				f"in str expected str,got {type(str)}")
@@ -707,6 +733,9 @@ class String():
 
 	@classmethod 
 	def bytes2str(cls,bytes):
+		"""
+		transform a given bytes to a str
+		"""
 		if not(isinstance(bytes,type(b''))):
 			raise TypeError(
 				f"in bytes expected bytes-like,got {type(bytes)}")
@@ -736,6 +765,9 @@ class String():
 		return self.string[-(len(substring)):] == substring
 
 	def remove_empty_lines(self):
+		"""
+		removes all empty lines in the string
+		"""
 		self._check_mutable()
 		s = self.split("\n+",flags=0,on_match=chr(9000))
 		r = ""
@@ -748,17 +780,27 @@ class String():
 		self.string = r
 
 	def remove(self,pattern,flags=0):
+		"""remove the pattern pattern for this string"""
 		self._check_mutable()
 		x = self.sub(pattern,"",flags)
 		self.string = self._normalize(x.string)
 
 	def count(self,pattern,flags=0):
+		"""
+		return the number of matches of pattern
+		"""
 		return len(self.findall(pattern,flags))
 
 	def find_numbers(self,flags=0):
+		"""
+		return a generator of all the numbers in this string
+		"""
 		return self.findall(r"\d+",flags)
 
 	def remove_last(self):
+		"""
+		remove the last element of the string
+		"""
 		self._check_mutable()
 		self.string = self.string[:-1]
 
@@ -853,7 +895,10 @@ class String():
 							encoding=encoding)
 		return cached
 
-	def match_porcent(self,b,normalize_size=False):
+	def match_porcent(self,b):
+		"""
+		return the porcent of match of self and b
+		"""
 		match = 0.0
 		#full normalizing ´b´
 		other = self.string_instance(self._normalize(b))
@@ -875,11 +920,13 @@ class String():
 			for indx in range(len(bigger)):
 				if self[indx] == other[indx]:
 					match += match_porcent
-		if diference and normalize_size:
-			match -= match_porcent*diference
 		return float("%2f" %(match*100))
 
 	def hex_encode(self):
+		"""
+		return this string encoded as a hexadecimal
+		LIST,not sum,sequence of hexadecimal numbers
+		"""
 		res = b''
 		for char in self.tostring(): #normalize to string,always
 			x= hex(ord(char))[2:] #ord(x) = 2 -> "0x2" -> "2" 
@@ -889,6 +936,10 @@ class String():
 		return res
 
 	def hex_decode(self):
+		"""
+		decode self parsing it as a SEQUENCE,not SUM
+		of hexadecimal integers
+		"""
 		res = ""
 		for numb in self.split("\\"): #no need to use flags=0
 			if numb=="":
@@ -900,13 +951,13 @@ class String():
 	def encrypt(self,method="u-enc",depth=0):
 		"""
 		method can be:
-			"u-enc":default the default encryping of the string 
+			DontImplemented:"u-enc":default the default encryping of the string 
 			"hex":encrypt it to hexadecimal,just as hex_encode and hex_decode
 		depth:int 
 			number of times repeting the encrypt process
 		"""
 		if method=="u-enc":
-			pass
+			return NotImplemented
 		elif method =="hex":
 			if depth == 0:
 				self.apply(String.hex_encode,take_self=True)
@@ -922,13 +973,13 @@ class String():
 		unencrypt this string.
 		using method `method`,
 		method can be:
-			"u-enc":default,and default used by .encrypt()
+			DontImplemented:"u-enc":default,and default used by .encrypt()
 			"hex":hexadecimal encrypt/decode
 		depth:int 
 			number of times repeting the unencrypt process
 		"""
 		if method=="u-enc":
-			pass 
+			return NotImplemented
 		elif method == "hex":
 			if depth == 0:
 				self.apply(String.hex_decode,take_self=True)
@@ -940,6 +991,10 @@ class String():
 				"invaliv encrypt method : "+str(method))
 
 	def compare(self,other,missing_key=" "):
+		"""
+		compare 2 strings and setting with `missing_key`
+		the spaces that are diferent in self and other
+		"""
 		other = self.string_instance(self._normalize(other))
 		res = String("")
 		for i in range(len(other)):
@@ -951,9 +1006,13 @@ class String():
 				res += missing_key
 		return res
 
-	def diferences(self,other):
+	def diferences(self,other,equals_key=" "):
+		"""
+		compare 2 strings and setting with `equals_key` the characters
+		that match in the both strings
+		"""
 		other = self.string_instance(self._normalize(other))
-		missing_key = " "
+		missing_key = equals_key
 		res = String("")
 		for i in range(len(other)):
 			if i == len(self):
@@ -964,7 +1023,10 @@ class String():
 				res += missing_key
 		return res
 
-	USES_DIFERENCES = False 
+	USES_DIFERENCES = False
+	USES_DIFERENCES.__doc__ = """if this is True,when doing self != x return the result of the `diference` method
+	this is no default to true,because would make problems in if statements"""
+
 	def __ne__(self,other):
 		if not(String.USES_DIFERENCES):
 			return not(self == other) 
@@ -972,6 +1034,12 @@ class String():
 			return self.diference(other)
 
 	def switch_elems(self,*elements,force_return=False):
+		"""
+		switch of position the elements *elements
+		elements can be consecutive strings,(if this the number 
+		of this consecutive strings need to be a factor of 2)
+		or a list or pairs [old_character,new_character]
+		"""
 		pure = False
 		for element in elements:
 			if isinstance(element,(str,bytes,String)):
@@ -1008,9 +1076,16 @@ class String():
 			self.string = self._normalize(r)
 
 	def path_iter(self,sep=sep):
+		"""
+		split and iter this as a path-like
+		"""
 		yield from self.split(sep) if sep in self else self.split("/")
 
 	def path_like(self):
+		"""
+		return if this can be interpreted as a 
+		path-like
+		"""
 		with_disk = self.match(r"[abcdefghijkolpnmvcxzqwrtyu]:")
 		if with_disk:
 			with_disk = with_disk.group()
@@ -1024,6 +1099,10 @@ class String():
 		return True
 
 	def copy_mutable(self):
+		"""
+		return a copy of self,
+		but mutable
+		"""
 		return self.string_instance(self.string,mutable=True)
 
 
