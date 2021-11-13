@@ -2,8 +2,11 @@ from io import StringIO,BytesIO,UnsupportedOperation
 from os import sep
 import re
 from sys import version_info
+from contextlib import contextmanager
 if version_info[0] != 3:raise ImportError("ustring only for python 3")
 del(version_info)
+
+__version__ = "0.2.0"
 
 class String():
 	"""
@@ -130,7 +133,9 @@ class String():
 			if no encoding given
 		"""
 		if isinstance(self.string,str):
-			return bytes(self.string,self.encoding if encoding != -1 else encoding)
+			if encoding == -1:
+				encoding = self.encoding
+			return bytes(self.string,encoding)
 		return self.string
 
 	def switch_bytes(self):
@@ -138,7 +143,7 @@ class String():
 		if isinstance(self,str):
 			self.string = self.tobytes()
 
-	def switch(self):
+	def switch(self,*elems,force_return = False):
 		"""
 		switch the type for str and bytes
 		for example: 
@@ -152,7 +157,9 @@ class String():
 			>>> s.isbytes()
 			True
 		"""
-		if isinstance(self.string,str):
+		if elems != ():
+			return self.switch_elems(*elems,force_return=force_return)
+		elif isinstance(self.string,str):
 			self.switch_bytes()
 		else:
 			self.switch_unicode()
@@ -263,12 +270,14 @@ class String():
 			str
 			bytes
 			String
+			int
+			float
+			
 		"""
+		if not(isinstance(sob,(str,bytes,String))):
+			sob = str(sob)
 		sob = self._normalize(sob)
-		return String(self.string + sob,mutable=self.mutable,cursed=self.cursed(),
-				cursor=self.cursor if self.cursed() else 0,unicode=self.unicode,encoding=self.encoding,
-				changeifbytes=self._change_bytes,mattr_mutable=self.__mattr_mutable,show_string=self.__show_string)
-
+		return self.string_instance(sob)
 	def __len__(self):
 		"""len(self)"""
 		return len(self.string)
@@ -323,7 +332,9 @@ class String():
 
 	def __iter__(self):
 		"""iter(self)"""
-		yield from iter(self.string)
+		i =  iter(self.string)
+		for c in i:
+			yield String(c)
 
 	def __str__(self):
 		"""str(self)"""
@@ -358,7 +369,7 @@ class String():
 			>>> s[0] = "a"
 			>>> s
 			String(aello)
-			>>> s.setitem(1,"a",override=True)
+			>>> s.setitem(0,"a",override=True)
 			>>> s
 			String(aello)
 			>>> s = String("how are you?")
@@ -444,11 +455,8 @@ class String():
 		if you are using self.split(r"\d+")
 		to split in numbers,just like re.split,
 		will dont work;you must compile it
-		self.split(re.compile(r"\d+"))
-		NOTE:
-			if you are splitting bytes with an diferent for 
-			one integer,this will not work,
-			it is dont yet implemented
+		self.split(re.compile(r"\d+")),or pass a keyargument
+		`flags`,like flags = 0 or flags = re.{some flag}
 		"""
 		if x == 1 or x == "":
 			s = list(self.tostring())
@@ -466,40 +474,39 @@ class String():
 					return s 
 		elif flags != -1:
 			return self.split_pattern(x,flags=flags,on_match=on_match)
-		try:
-			if isinstance(x,int):
-				res = []
-				curr = self.string_instance("")
-				for i in range(len(self.string)):
-					#i is index
-					if i % x == 0 and i != 0: #it has been produced x iterations 
-						if len(res)==maxsplit: #if maxsplit is reached
-							break
-						res.append(curr)
-						curr = self.string_instance("")
-						curr += self.string[i]
-					else:
-						curr += self.string[i]
-				if curr != self._normalize("") and not(len(res)==maxsplit):
-					#len(self) %x != 0 
+		elif isinstance(x,int):
+			res = []
+			curr = self.string_instance("")
+			_bytes = isinstance(self.string,bytes)
+			if _bytes:
+				self.switch_unicode()
+			for i in range(len(self.string)):
+				#i is index
+				if i % x == 0 and i != 0: #it has been produced x iterations 
+					if len(res)==maxsplit: #if maxsplit is reached
+						break
 					res.append(curr)
-				return res
-			else:
-				if not(isinstance(x,(str,re.Pattern,bytes))):
-					raise TypeError(f"in String.split(x) x expected to be str,re.Pattern,int or bytes,got {type(x)}")
-				if isinstance(x,bytes):
-					x = str(x)[2:-1]
-				if isinstance(x,re.Pattern):
-					return self.split_pattern(x,flags=flags,on_match=on_match)
+					curr = self.string_instance("")
+					curr.append(self.string[i])
 				else:
-					return self.split_literal(x,maxsplit=maxsplit)
-		except TypeError as e:
-			if str(e) == f"in String.split(x) x expected to be str,re.Pattern,int or bytes,got {type(x)}":
-				raise 
+					curr.append(self.string[i])
+			if curr != self._normalize("") and not(len(res)==maxsplit):
+				#len(self) %x != 0 
+				res.append(curr)
+			if _bytes:
+				self.string = self.tobytes()
+				for val in res:
+					val.string = val.tobytes()
+			return res
+		else:
+			if not(isinstance(x,(str,re.Pattern,bytes))):
+				raise TypeError(f"in String.split(x) x expected to be str,re.Pattern,int or bytes,got {type(x)}")
+			if isinstance(x,bytes):
+				x = str(x)[2:-1]
+			if isinstance(x,re.Pattern):
+				return self.split_pattern(x,flags=flags,on_match=on_match)
 			else:
-				raise TypeError(
-					"String.split(int) when String wrappings bytes is not supported") from NotImplementedError(
-					"wait to the version 0.2") 
+				return self.split_literal(x,maxsplit=maxsplit)
 
 	def splitspace(self,maxsplit=-1):
 		"""splits this string by ' '."""
@@ -708,7 +715,7 @@ class String():
 		for Example:
 			>>> b"\xFF"
 			ÿ
-			>>> String.bstr2str("FF")
+			>>> String.bstr2str(r"\xFF")
 			ÿ
 		"""
 		try:
@@ -720,7 +727,7 @@ class String():
 		except SyntaxError:
 			raise ValueError(bs)
 
-	@classmethod 
+	@classmethod
 	def str2bytes(cls,str,encoding="utf-8"):
 		"""
 		transform a given str to a bytes,
@@ -769,7 +776,7 @@ class String():
 		removes all empty lines in the string
 		"""
 		self._check_mutable()
-		s = self.split("\n+",flags=0,on_match=chr(9000))
+		s = self.split(r"\n+",flags=0,on_match=chr(9000))
 		r = ""
 		l = []
 		for i in s:
@@ -795,7 +802,7 @@ class String():
 		"""
 		return a generator of all the numbers in this string
 		"""
-		return self.findall(r"\d+",flags)
+		return [int(number) for number in self.findall(r"\d+",flags)]
 
 	def remove_last(self):
 		"""
@@ -895,6 +902,12 @@ class String():
 							encoding=encoding)
 		return cached
 
+	def __int__(self):
+		return int(self.tostring())
+
+	def __float__(self):
+		return self.as_float()
+
 	def match_porcent(self,b):
 		"""
 		return the porcent of match of self and b
@@ -957,7 +970,11 @@ class String():
 			number of times repeting the encrypt process
 		"""
 		if method=="u-enc":
-			return NotImplemented
+			if depth == 0:
+				self.apply(String.u_enc,take_self=True)
+			else:
+				self.apply(String.u_enc,take_self=True)
+				self.encrypt(method,depth=depth-1)
 		elif method =="hex":
 			if depth == 0:
 				self.apply(String.hex_encode,take_self=True)
@@ -979,7 +996,11 @@ class String():
 			number of times repeting the unencrypt process
 		"""
 		if method=="u-enc":
-			return NotImplemented
+			if depth == 0:
+				self.apply(String.u_enc_decode,take_self=True)
+			else:
+				self.apply(String.u_enc_decode,take_self=True)
+				self.unencrypt(method,depth=depth-1)
 		elif method == "hex":
 			if depth == 0:
 				self.apply(String.hex_decode,take_self=True)
@@ -1024,7 +1045,8 @@ class String():
 		return res
 
 	USES_DIFERENCES = False
-	USES_DIFERENCES.__doc__ = """if this is True,when doing self != x return the result of the `diference` method
+	
+	_USES_DIFERENCES_DOC = """if this is True,when doing self != x return the result of the `diference` method
 	this is no default to true,because would make problems in if statements"""
 
 	def __ne__(self,other):
@@ -1086,15 +1108,17 @@ class String():
 		return if this can be interpreted as a 
 		path-like
 		"""
-		with_disk = self.match(r"[abcdefghijkolpnmvcxzqwrtyu]:")
+		with_disk = self.match(r"[abcdefghijkolpnmvcxzqwrtyu]:",re.I)
 		if with_disk:
 			with_disk = with_disk.group()
 		if with_disk and len(self)<=2:
 			return False
 		rute = list(self.path_iter())
 		if with_disk:
+			if rute[0] == self:
+				return False
 			rute[0] = rute[0][2:]
-		if rute[0] == self:
+		elif rute[0] == self:
 			return False
 		return True
 
@@ -1105,6 +1129,173 @@ class String():
 		"""
 		return self.string_instance(self.string,mutable=True)
 
+	def md5sum(self):
+		from hashlib import md5 
+		return md5(self.encode()).hexdigest()
 
+	def sha1(self):
+		from hashlib import sha1 
+		return sha1(self.encode()).hexdigest()
+
+	def insert(self,indx,value):
+		self[indx] = value
+
+	def u_enc(self):
+		return NotImplemented #TODO : u_enc called in encrypt("u_enc")
+
+	def u_enc_decode(self):
+		return NotImplemented #TODO : u_enc_decode called in decrypt("u_enc")
+
+	def pickle(self):
+		from pickle import dumps
+		self.apply_factory(take_self=True,keep=False)(dumps)
+
+	def int_jump(self,v,generator=True):
+		x = self.split(int(v))
+		if len(x) == 1:
+			if generator:
+				yield x
+			else:
+				return x 
+		else:
+			if generator:
+				yield from x 
+			else:
+				return x
+
+	def str_jump(self,val,generator=True,flags=-1):
+		x = self.split(val,flags=flags)
+		if len(x) == 1:
+			if generator:
+				yield x
+			else:
+				return x 
+		else:
+			if generator:
+				yield from x 
+			else:
+				return x		
+
+	def jump(self,value,generator=True,flags=-1):
+		if isinstance(value,int):
+			return self.int_jump(value,generator)
+		elif isinstance(value,(str,bytes,String)):
+			return self.str_jump(String(value).tostring())
+
+	def index(self,expr):
+		c = self.count(expr)
+		if c >= 2:
+			x = self.split(expr,flags=0)
+			compensation = 0 
+			for i in x:
+				yield compensation
+				compensation += len(i)-1
+		return self.string.index(expr)
+
+	def locate(self,expr,flags=0):
+		s = self.tostring()
+		res = []
+		skips = 0 		
+		for c in range(len(s)):
+			if skips:
+				skips -= 1 
+				continue
+			match = re.match(expr,s[c:],flags)
+			if match:
+				skips = len(match.group())-1
+				res.append((c,c+skips))
+		if len(res) == 1:
+			return res[0]
+
+		return res
+
+	span = locate #noqa
+
+	@contextmanager
+	def lock(self):
+		from threading import RLock
+		lock = RLock()
+		try:
+			lock.acquire()
+			yield self 
+		finally:
+			lock.release()
+
+	def context(self,func):
+		if isinstance(func,(str,bytes,String)):
+			func = String(func).tostring()
+			func = getattr(self,func)
+		if hasattr(func,"__enter__"):
+			return func
+		@contextmanager 
+		def wrapper(*a,**k):
+			try:
+				yield func(*a,**k)
+			finally:
+				pass
+		wrapper.__name__ = func.__name__ 
+		return wrapper
+
+	def isthis(self,other):
+		"""
+		same than self is other
+		"""
+		return self is other 
+
+	def ignore(self,other):
+		other = String(other).tostring()
+		x = self.tostring()
+		if len(x) != len(other):return False 
+		for indx in range(len(x)):
+			if x[indx] in (other[indx].lower(),other[indx].upper()):
+				pass
+			else:
+				return False 
+		return True
+
+	ignorecase = ignore #noqa
+
+	def asdigit(self):
+		g = {}
+		try:
+			exec(f"h = {str(self)}",g)
+		except (NameError,SyntaxError):
+			raise ValueError("self not a digit-like")
+		return g["h"]
+
+	def get_floats(self):
+		return [float(n) for n in self.findall(rf"\d+(\.\d+)?") if n != ""]
+
+	def isdigit(self):
+		try:
+			self.asdigit()
+			return True 
+		except ValueError:
+			return False
+
+	def bigger_number(self):
+		numbs = []
+		for i in self.findall(r"\d+"):
+			numbs.append(int(i))
+		return max(numbs)
+
+	def bigger_float(self):
+		numbs = []
+		for i in self.findall(rf"\d+(\.\d+)?"):
+			if i == "":continue
+		return list([float(n) for n in numbs])
+
+	def as_float(self):
+		if not(self.match(r"\d+(\.\d+)?")):
+			raise ValueError(
+				"self is not a float-like")
+		g = {}
+		exec(f"a = {self}",g)
+		return g["a"]
+
+	def append(self,o):
+		o = self._normalize(o)
+		self._check_mutable()
+		self.string += o
 
 
