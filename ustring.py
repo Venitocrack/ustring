@@ -6,7 +6,7 @@ from contextlib import contextmanager
 if version_info[0] != 3:raise ImportError("ustring only for python 3")
 del(version_info)
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 class String():
 	"""
@@ -811,12 +811,14 @@ class String():
 		self._check_mutable()
 		self.string = self.string[:-1]
 
-	def copy(self):
+	def copy(self,**k):
 		"""
 		return a copy of self
-		not deepcopy
+		not deepcopy,passing k. arguments
+		will overwrite the original values by the
+		passed key arguments.
 		"""
-		return self.string_instance(self.string)
+		return self.string_instance(self.string,**k)
 
 	def empty(self):
 		"""
@@ -1141,10 +1143,21 @@ class String():
 		self[indx] = value
 
 	def u_enc(self):
-		return NotImplemented #TODO : u_enc called in encrypt("u_enc")
+		x = String("")
+		for indx,elem in enumerate(self):
+			x.append("@"+repr(elem.encode())+"@")
+		x = x[:-1]
+		return x
 
 	def u_enc_decode(self):
-		return NotImplemented #TODO : u_enc_decode called in decrypt("u_enc")
+		res = String("")
+		for char in self.split("@"):
+			if char == "":
+				continue
+			g = {}
+			exec(f"a = {char}",g)
+			res.append(g["a"].decode() if type(g["a"]) == bytes else g["a"])
+		return res
 
 	def pickle(self):
 		from pickle import dumps
